@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { calculateFileHash, registerDocumentOnBlockchain } from "@/lib/blockchain"
+import freighterApi from "@stellar/freighter-api"
 
 export default function RegisterDocument() {
     const [file, setFile] = useState<File | null>(null)
@@ -15,10 +17,12 @@ export default function RegisterDocument() {
     const [isUploading, setIsUploading] = useState(false)
     const [isSuccess, setIsSuccess] = useState(false)
     const [txHash, setTxHash] = useState("")
+    const [error, setError] = useState<string | null>(null)
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             setFile(e.target.files[0])
+            setError(null)
         }
     }
 
@@ -26,19 +30,37 @@ export default function RegisterDocument() {
         e.preventDefault()
         if (!file || !documentName) return
 
-        setIsUploading(true)
+        try {
+            setIsUploading(true)
+            setError(null)
 
-        // Simulate blockchain transaction
-        await new Promise((resolve) => setTimeout(resolve, 2000))
+            // Check if wallet is connected
+            const isConnected = await freighterApi.isConnected()
+            if (!isConnected) {
+                throw new Error("Wallet not connected. Please connect your Freighter wallet.")
+            }
 
-        // In a real implementation, we would:
-        // 1. Calculate the SHA-256 hash of the file
-        // 2. Send a transaction to the blockchain with the hash
-        // 3. Return the transaction hash
+            // Get public key
+            const { address: publicKey } = await freighterApi.getAddress()
+            if (!publicKey) {
+                throw new Error("Could not get wallet address. Please reconnect your wallet.")
+            }
 
-        setTxHash("0x" + Math.random().toString(16).slice(2, 42))
-        setIsSuccess(true)
-        setIsUploading(false)
+            // Calculate document hash
+            const documentHash = await calculateFileHash(file)
+
+            // Register document on blockchain
+            const hash = await registerDocumentOnBlockchain(publicKey, documentHash, documentName)
+
+            // Update UI with success
+            setTxHash(hash)
+            setIsSuccess(true)
+        } catch (err) {
+            console.error("Error registering document:", err)
+            setError(err instanceof Error ? err.message : "Failed to register document. Please try again.")
+        } finally {
+            setIsUploading(false)
+        }
     }
 
     const resetForm = () => {
@@ -46,6 +68,7 @@ export default function RegisterDocument() {
         setDocumentName("")
         setIsSuccess(false)
         setTxHash("")
+        setError(null)
     }
 
     if (isSuccess) {
@@ -91,6 +114,7 @@ export default function RegisterDocument() {
             </CardHeader>
             <form onSubmit={handleSubmit}>
                 <CardContent className="space-y-4">
+                    {error && <div className="p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">{error}</div>}
                     <div className="space-y-2">
                         <Label htmlFor="documentName">Document Name</Label>
                         <Input

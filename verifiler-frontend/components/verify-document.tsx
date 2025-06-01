@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { calculateFileHash, verifyDocumentOnBlockchain } from "@/lib/soroban-client"
 
 type VerificationStatus = "idle" | "verifying" | "verified" | "failed"
 
@@ -20,37 +21,43 @@ export default function VerifyDocument() {
         documentName: string
         txHash: string
     } | null>(null)
+    const [error, setError] = useState<string | null>(null)
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             setFile(e.target.files[0])
             setStatus("idle")
+            setError(null)
         }
     }
 
     const handleVerify = async () => {
         if (!file) return
 
-        setStatus("verifying")
+        try {
+            setStatus("verifying")
+            setError(null)
 
-        // Simulate blockchain verification
-        await new Promise((resolve) => setTimeout(resolve, 2000))
+            // Calculate document hash
+            const documentHash = await calculateFileHash(file)
 
-        // In a real implementation, we would:
-        // 1. Calculate the SHA-256 hash of the file
-        // 2. Query the blockchain for this hash
-        // 3. Return the verification result
+            // Verify document on blockchain
+            const result = await verifyDocumentOnBlockchain(documentHash)
 
-        // Simulate a 70% chance of successful verification
-        if (Math.random() > 0.3) {
-            setStatus("verified")
-            setVerificationDetails({
-                registeredBy: "0x" + Math.random().toString(16).slice(2, 42),
-                registeredAt: new Date(Date.now() - Math.random() * 10000000000).toISOString(),
-                documentName: file.name.split(".")[0],
-                txHash: "0x" + Math.random().toString(16).slice(2, 42),
-            })
-        } else {
+            if (result.isVerified && result.registeredBy && result.registeredAt && result.documentName) {
+                setStatus("verified")
+                setVerificationDetails({
+                    registeredBy: result.registeredBy,
+                    registeredAt: result.registeredAt,
+                    documentName: result.documentName,
+                    txHash: documentHash,
+                })
+            } else {
+                setStatus("failed")
+            }
+        } catch (err) {
+            console.error("Error verifying document:", err)
+            setError(err instanceof Error ? err.message : "Failed to verify document. Please try again.")
             setStatus("failed")
         }
     }
@@ -59,6 +66,7 @@ export default function VerifyDocument() {
         setFile(null)
         setStatus("idle")
         setVerificationDetails(null)
+        setError(null)
     }
 
     return (
@@ -68,6 +76,10 @@ export default function VerifyDocument() {
                 <CardDescription>Upload a document to verify if it has been registered on the blockchain</CardDescription>
             </CardHeader>
             <CardContent>
+                {error && (
+                    <div className="p-3 mb-4 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">{error}</div>
+                )}
+
                 {status === "verified" ? (
                     <div className="space-y-4">
                         <div className="flex items-center justify-center p-4 bg-green-50 rounded-lg">
