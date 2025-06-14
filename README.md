@@ -35,7 +35,7 @@ This project is a document verification dApp built using **Stellar and Soroban**
 
 ```shellscript
 git clone https://github.com/KayraG/verifiler.git
-cd blockverify
+cd verifiler
 ```
 
 2️⃣ **Install dependencies:**
